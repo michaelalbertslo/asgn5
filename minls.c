@@ -67,7 +67,12 @@ void parse_options(int argc, char *argv[]){
 }
 
 int main(int argc, char *argv[]){
+  FILE *image = NULL;
   parse_options(argc, argv);
-  
+  image = fopen(imagefile, "r");
+  if (image == NULL){
+    perror("fopen");
+    exit(EXIT_FAILURE);
+  }
   return 0;
 }
