@@ -3,6 +3,25 @@
 
 #include <stdint.h>
 
+#define PARTITION_TABLE_OFFSET   0x1BE
+#define PARTITION_TYPE_MINIX     0x81
+#define BOOT_SIGNATURE_1         0x55
+#define BOOT_SIGNATURE_2         0xAA
+
+#define MINIX_MAGIC              0x4D5A
+#define MINIX_MAGIC_REVERSED     0x5A4D
+
+#define MINIX_INODE_SIZE         64
+#define MINIX_DIRENT_SIZE        64
+
+#define MBR_SIZE                 512
+#define SECTOR_SIZE              512
+#define BOOT_SIGNATURE_1_LOC     510
+#define BOOT_SIGNATURE_2_LOC     511
+#define BOOT_SIG_1               0x55
+#define BOOT_SIG_2               0xAA
+#define SUPERBLOCK_OFFSET  1024
+
 typedef struct __attribute__((packed)) partition_entry {
   uint8_t  bootind;
   uint8_t  start_head;
@@ -31,7 +50,7 @@ typedef struct __attribute__((packed)) superblock {
   int16_t  pad3;
   uint16_t blocksize;
   uint8_t  subversion;
-} superblock_t;
+} superblock;
 
 
 #define DIRECT_ZONES 7
@@ -55,5 +74,14 @@ typedef struct __attribute__((packed)) minix_dirent {
   uint32_t inode;
   unsigned char name[60];
 } minix_dirent;
+
+typedef struct {
+  uint32_t firstIblock;
+  uint32_t zonesize;
+  uint32_t ptrs_per_blk;
+  uint32_t links_per_zone;
+  uint32_t ino_per_block;
+  struct superblock sb;
+} fs_info;
 
 #endif
