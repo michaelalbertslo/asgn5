@@ -3,9 +3,12 @@
 #include <errno.h>
 #include <stdint.h>
 #include "min.h"
+#include <string.h>
 #include <stdlib.h>
 
 #define BASE 10
+#define MAXPART 3
+#define MINPART 0
 
 static int verbose = 0;
 static int primary = -1;
@@ -14,6 +17,7 @@ const char *imagefile = NULL;
 const char *path = NULL;
 
 off_t fs_start = 0; /*offset for where the FS starts*/
+off_t fs_end;
 
 static int block_size;
 
@@ -33,11 +37,19 @@ void parse_options(int argc, char *argv[]){
           fprintf(stderr, "-p usage: p <num>\n");
           exit(EXIT_FAILURE);
         }
+        if (primary > MAXPART || primary < MINPART){
+          fprintf(stderr, "Partition %d out of range.  Must be 0..3.\n", primary);
+          exit(EXIT_FAILURE);
+        }
         break;
       case 's':
         subpart = strtol(optarg, &end, BASE);
         if (end == optarg || errno == ERANGE){
           fprintf(stderr, "-s usage: s <num>\n");
+          exit(EXIT_FAILURE);
+        }
+        if (subpart > MAXPART || subpart < MINPART){
+          fprintf(stderr, "Partition %d out of range.  Must be 0..3.\n", subpart);
           exit(EXIT_FAILURE);
         }
         break;
@@ -71,27 +83,72 @@ void parse_options(int argc, char *argv[]){
   }
 }
 
+int init_nopart(FILE *image){
+  return 0;
+}
 
-int init_fs(FILE *image){
+void handle_part(FILE *image){
   uint8_t buf[MBR_SIZE];
+  size_t bytes_read;
+  partition_entry entry;
   if (verbose){
-    printf("verbose: Loading MBR into buffer...");
+    printf("verbose: Loading MBR into buffer...\n");
   }
-  if (fseek(image, 0, SEEK_SET) != 0){
+  if (fseek(image, fs_start, SEEK_SET) != 0){
     perror("fseek");
     exit(EXIT_FAILURE);
   }
-  if (fread(buf, sizeof(uint8_t), MBR_SIZE, image) != 0){
-    perror("fread");
-    exit(EXIT_FAILURE);
+  bytes_read = fread(buf, sizeof(uint8_t), MBR_SIZE, image);
+  if (bytes_read <= sizeof(buf)){
+    if (ferror(image)){
+      perror("fread");
+      exit(EXIT_FAILURE);
+    }
   }
-  if (buf[BOOT_SIGNATURE_1_LOC] != BOOT_SIGNATURE_1 || buf[BOOT_SIGNATURE_2_LOC] != BOOT_SIGNATURE_2){
-    fprintf(stderr, "error: boot signature(s) is invalid\n");
+  if (buf[BOOT_SIGNATURE_1_LOC] != BOOT_SIG_1 || buf[BOOT_SIGNATURE_2_LOC] != BOOT_SIG_2){
+    fprintf(stderr, "Invalid partition signature (0x%x, 0x%x).\n", buf[BOOT_SIGNATURE_1_LOC], buf[BOOT_SIGNATURE_2_LOC]);
     exit(EXIT_FAILURE);
   }
   if (verbose){
-    printf("verbose: Boot sig 1: %d, boot sig 2: %d", buf[BOOT_SIGNATURE_1], buf[BOOT_SIGNATURE_2]);
+    printf("verbose: Boot sig 1: 0x%x, boot sig 2: 0x%x\n", buf[BOOT_SIGNATURE_1_LOC], buf[BOOT_SIGNATURE_2_LOC ]);
   }
+  if (memcpy(&entry, &buf[PARTITION_TABLE_OFFSET + (sizeof(entry) * primary)], sizeof(entry)) == NULL){
+    perror("memcpy");
+    exit(EXIT_FAILURE);
+  }
+  if(entry.type != PARTITION_TYPE_MINIX){
+    fprintf(stderr, "This doesn't look like a Minix filesystem.\n");
+    exit(EXIT_FAILURE);
+  }
+  if (verbose){
+    printf("verbose: seeking to start of partition %d...\n", primary);
+  }
+  if (fseek(image, entry.lFirst * SECTOR_SIZE, SEEK_SET) != 0){
+    perror("fseek");
+    exit(EXIT_FAILURE);
+  }
+  fs_start = entry.lFirst * SECTOR_SIZE;
+  fs_end = (entry.lFirst + entry.size) * SECTOR_SIZE;
+}
+
+int init_haspart(FILE *image){
+  handle_part(image);
+  if (subpart != -1){
+    if (verbose){
+      printf("verbose: handing subpart...\n");
+    }
+    handle_part(image);
+  }
+}
+
+
+int init_fs(FILE *image){
+  if (primary == -1){
+    init_nopart(image);
+  } else {
+    init_haspart(image);
+  }
+  
   
 }
 
@@ -100,12 +157,13 @@ int main(int argc, char *argv[]){
   FILE *image = NULL;
   parse_options(argc, argv);
   if (verbose){
-    printf("verbose: Opening imagefile...");
+    printf("verbose: Opening imagefile...\n");
   }
   image = fopen(imagefile, "r");
   if (image == NULL){
     perror("fopen");
     exit(EXIT_FAILURE);
   }
+  init_fs(image);
   return 0;
 }
