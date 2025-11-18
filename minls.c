@@ -1,6 +1,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <errno.h>
+#include <stdint.h>
 #include "min.h"
 #include <stdlib.h>
 
@@ -11,6 +12,10 @@ static int primary = -1;
 static int subpart = -1;
 const char *imagefile = NULL;
 const char *path = NULL;
+
+off_t fs_start = 0; /*offset for where the FS starts*/
+
+static int block_size;
 
 
 void parse_options(int argc, char *argv[]){
@@ -66,9 +71,37 @@ void parse_options(int argc, char *argv[]){
   }
 }
 
+
+int init_fs(FILE *image){
+  uint8_t buf[MBR_SIZE];
+  if (verbose){
+    printf("verbose: Loading MBR into buffer...");
+  }
+  if (fseek(image, 0, SEEK_SET) != 0){
+    perror("fseek");
+    exit(EXIT_FAILURE);
+  }
+  if (fread(buf, sizeof(uint8_t), MBR_SIZE, image) != 0){
+    perror("fread");
+    exit(EXIT_FAILURE);
+  }
+  if (buf[BOOT_SIGNATURE_1_LOC] != BOOT_SIGNATURE_1 || buf[BOOT_SIGNATURE_2_LOC] != BOOT_SIGNATURE_2){
+    fprintf(stderr, "error: boot signature(s) is invalid\n");
+    exit(EXIT_FAILURE);
+  }
+  if (verbose){
+    printf("verbose: Boot sig 1: %d, boot sig 2: %d", buf[BOOT_SIGNATURE_1], buf[BOOT_SIGNATURE_2]);
+  }
+  
+}
+
+
 int main(int argc, char *argv[]){
   FILE *image = NULL;
   parse_options(argc, argv);
+  if (verbose){
+    printf("verbose: Opening imagefile...");
+  }
   image = fopen(imagefile, "r");
   if (image == NULL){
     perror("fopen");
