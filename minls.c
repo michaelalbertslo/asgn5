@@ -21,7 +21,6 @@ off_t fs_end;
 
 static int block_size;
 
-
 void parse_options(int argc, char *argv[]){
   int opt;
   char *end;
@@ -83,9 +82,56 @@ void parse_options(int argc, char *argv[]){
   }
 }
 
-int init_nopart(FILE *image){
-  return 0;
+void print_superblock(fs_info *fs){
+  printf("Superblock:\n");
+  printf("  On disk:\n");
+  printf("    ninodes        = %10u\n", fs->sb.ninodes);
+  printf("    pad1           = %10u\n", fs->sb.pad1);
+  printf("    i_blocks       = %10d\n", fs->sb.i_blocks);
+  printf("    z_blocks       = %10d\n", fs->sb.z_blocks);
+  printf("    firstdata      = %10u\n", fs->sb.firstdata);
+  printf("    log_zone_size  = %10d\n", fs->sb.log_zone_size);
+  printf("    max_file       = %10u\n", fs->sb.max_file);
+  printf("    zones          = %10u\n", fs->sb.zones);
+  printf("    magic          = 0x%8.4x\n", (unsigned)fs->sb.magic);
+  printf("    blocksize      = %10u\n", fs->sb.blocksize);
+  printf("    subversion     = %10u\n", fs->sb.subversion);
+  printf("  Computed:\n");
+  printf("    firstIblock    = %10u\n", fs->firstIblock);
+  printf("    zonesize       = %10u\n", fs->zonesize);
+  printf("    ptrs_per_blk   = %10u\n", fs->ptrs_per_blk);
+  printf("    links_per_zone = %10u\n", fs->links_per_zone);
+  printf("    ino_per_block  = %10u\n", fs->ino_per_block);
 }
+
+void handle_superblock(FILE *image, fs_info *fs){
+  uint8_t buf[sizeof(superblock)];
+  size_t bytes_read;
+  if (fseek(image, (fs_start + SUPERBLOCK_OFFSET), SEEK_SET) != 0){
+    perror("fseek");
+    exit(EXIT_FAILURE);
+  }
+  bytes_read = fread(&fs->sb, sizeof(uint8_t), sizeof(superblock), image);
+  if (bytes_read <= sizeof(buf)){
+    if (ferror(image)){
+      perror("fread");
+      exit(EXIT_FAILURE);
+    }
+  }
+  if (fs->sb.magic != MINIX_MAGIC){
+    fprintf(stderr, "This doesn't look like a Minix filesystem.\n");
+    exit(EXIT_FAILURE);
+  }
+  fs->zonesize = fs->sb.blocksize << fs->sb.log_zone_size;
+  fs->firstIblock = 2 + fs->sb.i_blocks + fs->sb.z_blocks;
+  fs->ptrs_per_blk = fs->sb.blocksize / sizeof(uint32_t);
+  fs->links_per_zone = fs->zonesize / sizeof(minix_dirent);
+  fs->ino_per_block = fs->sb.blocksize / sizeof(minix_inode);
+  if (verbose){
+    print_superblock(fs);
+  }  
+}
+
 
 void handle_part(FILE *image){
   uint8_t buf[MBR_SIZE];
@@ -131,7 +177,7 @@ void handle_part(FILE *image){
   fs_end = (entry.lFirst + entry.size) * SECTOR_SIZE;
 }
 
-int init_haspart(FILE *image){
+int init_haspart(FILE *image, fs_info *fs){
   handle_part(image);
   if (subpart != -1){
     if (verbose){
@@ -139,22 +185,22 @@ int init_haspart(FILE *image){
     }
     handle_part(image);
   }
+  handle_superblock(image, fs);
 }
 
 
-int init_fs(FILE *image){
+int init_fs(FILE *image, fs_info *fs){
   if (primary == -1){
-    init_nopart(image);
+    handle_superblock(image, fs);
   } else {
-    init_haspart(image);
+    init_haspart(image, fs);
   }
-  
-  
 }
 
 
 int main(int argc, char *argv[]){
   FILE *image = NULL;
+  fs_info fs;
   parse_options(argc, argv);
   if (verbose){
     printf("verbose: Opening imagefile...\n");
@@ -164,6 +210,6 @@ int main(int argc, char *argv[]){
     perror("fopen");
     exit(EXIT_FAILURE);
   }
-  init_fs(image);
+  init_fs(image, &fs);
   return 0;
 }
