@@ -33,6 +33,19 @@ void print_superblock(fs_info *fs) {
 }
 
 
+
+/*TODO: actually go trough a path. just doing root rn.*/
+void resolve_path(FILE *image, fs_info *fs, minix_inode *inode){
+  char *cur_path;
+  char *delim = strdup("/");
+
+  readinto(inode, get_inode_offset(1,fs), sizeof(minix_inode), image, NULL);
+  cur_path = strtok(path, delim);
+  while (cur_path != NULL){
+    /* traverse */
+  }
+}
+
 void readinto(void *thing, off_t offset, size_t bytes, FILE *image, size_t *tot){
   size_t bytes_read;
   if (fseek(image, (fs_start + offset), SEEK_SET) != 0){

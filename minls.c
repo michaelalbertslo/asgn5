@@ -181,17 +181,6 @@ void list_dir(FILE *image, minix_inode *dir_node, fs_info *fs) {
   }
 }
 
-/*TODO: go trough a path. just doing root rn.*/
-void resolve_path(FILE *image, fs_info *fs, minix_inode *inode){
-  char *cur_path;
-  char *delim = strdup("/");
-
-  readinto(inode, get_inode_offset(1,fs), sizeof(minix_inode), image, NULL);
-  cur_path = strtok(path, delim);
-  while (cur_path != NULL){
-    /* traverse */
-  }
-}
 
 int main(int argc, char *argv[]) {
   FILE *image = NULL;
