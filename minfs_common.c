@@ -32,6 +32,8 @@ void print_superblock(fs_info *fs) {
   printf("    ino_per_block  = %10u\n", fs->ino_per_block);
 }
 
+/*some common math functionalty*/
+
 void handle_superblock(FILE *image, fs_info *fs) {
   uint8_t buf[sizeof(superblock)];
   size_t bytes_read;
