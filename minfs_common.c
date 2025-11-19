@@ -48,7 +48,7 @@ void readinto(void *thing, off_t offset, size_t bytes, FILE *image, size_t *tot)
   }
   
   if (tot != NULL){
-    *tot+=bytes_read;
+    *tot=bytes_read;
   }
 }
 

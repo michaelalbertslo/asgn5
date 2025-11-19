@@ -2,10 +2,11 @@
 #include <stdio.h>
 #include <errno.h>
 #include <stdint.h>
-#include "min.h"
+#include <sys/stat.h>
 #include <string.h>
 #include <stdlib.h>
 #include "minfs_common.h"
+#include "min.h"
 
 #define BASE 10
 #define MAXPART 3
@@ -14,6 +15,8 @@
 #define FILEMASK  0170000
 #define DIRECTORY 0040000
 #define REGFILE   0100000
+
+#define PERMSMASK 07777
 
 static int verbose = 0;
 static int primary = -1;
@@ -90,22 +93,94 @@ off_t get_inode_offset(int node_num, fs_info *fs){
   return (fs->firstIblock * fs->sb.blocksize) + ((node_num - 1) * sizeof(minix_inode));
 }
 
+void print_filetype(uint16_t mode){
+  uint16_t type = mode & FILEMASK;
+  switch(type){
+    case DIRECTORY:
+      printf("d");
+      break;
+    default:
+      printf("-");
+      break;
+  }
+}
+
+void print_perms(mode_t mode){
+  char perms[10] = "---------";
+
+  if(mode & S_IRUSR){
+    perms[0] = 'r';
+  }
+  if(mode & S_IWUSR){
+    perms[1] = 'w';
+  }
+  if(mode & S_IXUSR){
+    perms[2] = (mode & S_ISUID) ? 's' : 'x';
+  }
+
+  if(mode & S_IRGRP){
+    perms[3] = 'r';
+  }
+  if(mode & S_IWGRP){
+    perms[4] = 'w';
+  }
+  if(mode & S_IXGRP){
+    perms[5] = (mode & S_ISGID) ? 's' : 'x';
+  }
+
+  if(mode & S_IROTH){
+    perms[6] = 'r';
+  }
+  if(mode & S_IWOTH){
+    perms[7] = 'w';
+  }
+  if(mode & S_IXOTH){
+    perms[8] = (mode & S_ISVTX) ? 't' : 'x';
+  }
+
+  perms[9] = '\0';
+  printf("%s ", perms);
+}
+
+void print_file(minix_dirent *entry, fs_info *fs, FILE *image){
+  minix_inode file_node;
+
+  readinto(&file_node, get_inode_offset(entry->inode ,fs), sizeof(minix_inode), image, NULL);
+  print_filetype(file_node.mode);
+  print_perms(file_node.mode & PERMSMASK);
+  printf("%9u %s\n", file_node.size, entry->name);
+}
 
 /*TODO: go through indirect zones as well*/
-/* TODO: need to get file perms and size as well*/
-void list_dir(FILE *image, minix_inode *dir_node, fs_info *fs){
+void list_dir(FILE *image, minix_inode *dir_node, fs_info *fs) {
   int i;
   minix_dirent dirent;
-  size_t bytes_read = 0;
+  size_t total_bytes_read = 0;
+  size_t zone_bytes_read = 0;
+  size_t bytes_just_read = 0;
   off_t offset;
 
-  for (i=0; i < DIRECT_ZONES; i++){ /* go through each zone */
-    while (bytes_read < fs->zonesize){ /* read through a zone */
-      offset = (dir_node->zone[i] * fs->zonesize) + bytes_read;
-      readinto(&dirent, offset, sizeof(dirent), image, &bytes_read);
-      if (bytes_read >= dir_node->size){
+  for (i = 0; i < DIRECT_ZONES && dir_node->zone[i] != 0; i++) {
+    zone_bytes_read = 0;
+    
+    while (zone_bytes_read < fs->zonesize && total_bytes_read < dir_node->size) {
+      
+      if (total_bytes_read > dir_node->size) {
         return;
       }
+
+      bytes_just_read = 0;
+      offset = (dir_node->zone[i] * fs->zonesize) + zone_bytes_read;
+      readinto(&dirent, offset, sizeof(dirent), image, &bytes_just_read);
+      
+      zone_bytes_read += bytes_just_read;
+      total_bytes_read += bytes_just_read;
+      
+      if (dirent.inode == 0) {
+        continue;
+      }
+      
+      print_file(&dirent, fs, image);
     }
   }
 }
