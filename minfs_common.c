@@ -52,6 +52,10 @@ void readinto(void *thing, off_t offset, size_t bytes, FILE *image, size_t *tot)
   }
 }
 
+off_t get_inode_offset(int node_num, fs_info *fs){
+  return (fs->firstIblock * fs->sb.blocksize) + ((node_num - 1) * sizeof(minix_inode));
+}
+
 void handle_superblock(FILE *image, fs_info *fs) {
   size_t bytes_read;
   

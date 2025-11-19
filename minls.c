@@ -89,10 +89,6 @@ void parse_options(int argc, char *argv[]) {
   }
 }
 
-off_t get_inode_offset(int node_num, fs_info *fs){
-  return (fs->firstIblock * fs->sb.blocksize) + ((node_num - 1) * sizeof(minix_inode));
-}
-
 void print_filetype(uint16_t mode){
   uint16_t type = mode & FILEMASK;
   switch(type){
