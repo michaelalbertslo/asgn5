@@ -11,11 +11,15 @@
 #define MAXPART 3
 #define MINPART 0
 
+#define FILEMASK  0170000
+#define DIRECTORY 0040000
+#define REGFILE   0100000
+
 static int verbose = 0;
 static int primary = -1;
 static int subpart = -1;
 const char *imagefile = NULL;
-const char *path = NULL;
+char *path = NULL;
 
 void parse_options(int argc, char *argv[]) {
   int opt;
@@ -68,9 +72,9 @@ void parse_options(int argc, char *argv[]) {
   
   imagefile = argv[optind++];
   if (remain >= 2) {
-    path = argv[optind];
+    path = strdup(argv[optind]);
   } else {
-    path = "/";
+    path = strdup("/");
   }
   
   if (verbose) {
@@ -82,9 +86,46 @@ void parse_options(int argc, char *argv[]) {
   }
 }
 
+off_t get_inode_offset(int node_num, fs_info *fs){
+  return (fs->firstIblock * fs->sb.blocksize) + ((node_num - 1) * sizeof(minix_inode));
+}
+
+
+/*TODO: go through indirect zones as well*/
+/* TODO: need to get file perms and size as well*/
+void list_dir(FILE *image, minix_inode *dir_node, fs_info *fs){
+  int i;
+  minix_dirent dirent;
+  size_t bytes_read = 0;
+  off_t offset;
+
+  for (i=0; i < DIRECT_ZONES; i++){ /* go through each zone */
+    while (bytes_read < fs->zonesize){ /* read through a zone */
+      offset = (dir_node->zone[i] * fs->zonesize) + bytes_read;
+      readinto(&dirent, offset, sizeof(dirent), image, &bytes_read);
+      if (bytes_read >= dir_node->size){
+        return;
+      }
+    }
+  }
+}
+
+/*TODO: go trough a path. just doing root rn.*/
+void resolve_path(FILE *image, fs_info *fs, minix_inode *inode){
+  char *cur_path;
+  char *delim = strdup("/");
+
+  readinto(inode, get_inode_offset(1,fs), sizeof(minix_inode), image, NULL);
+  cur_path = strtok(path, delim);
+  while (cur_path != NULL){
+    /* traverse */
+  }
+}
+
 int main(int argc, char *argv[]) {
   FILE *image = NULL;
   fs_info fs;
+  minix_inode inode;
   
   parse_options(argc, argv);
   
@@ -103,6 +144,8 @@ int main(int argc, char *argv[]) {
   if (verbose) {
     print_superblock(&fs);
   }
-  
+  printf("%s:\n", path);
+  resolve_path(image, &fs, &inode);
+  list_dir(image, &inode, &fs);
   return 0;
 }

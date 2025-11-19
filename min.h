@@ -20,7 +20,7 @@
 #define BOOT_SIGNATURE_2_LOC     511
 #define BOOT_SIG_1               0x55
 #define BOOT_SIG_2               0xAA
-#define SUPERBLOCK_OFFSET  1024
+#define SUPERBLOCK_OFFSET        1024
 
 typedef struct __attribute__((packed)) partition_entry {
   uint8_t  bootind;

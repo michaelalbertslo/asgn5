@@ -11,5 +11,6 @@ void handle_part(FILE *image);
 void handle_superblock(FILE *image, fs_info *fs);
 void init_fs(FILE *image, fs_info *fs, int primary, int subpart);
 void print_superblock(fs_info *fs);
+void readinto(void *thing, off_t offset, size_t bytes, FILE *image, size_t *tot);
 
 #endif

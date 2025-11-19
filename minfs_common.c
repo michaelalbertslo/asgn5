@@ -32,8 +32,27 @@ void print_superblock(fs_info *fs) {
   printf("    ino_per_block  = %10u\n", fs->ino_per_block);
 }
 
+
+void readinto(void *thing, off_t offset, size_t bytes, FILE *image, size_t *tot){
+  size_t bytes_read;
+  if (fseek(image, (fs_start + offset), SEEK_SET) != 0){
+    perror("fseek");
+    exit(EXIT_FAILURE);
+  }
+  bytes_read = fread(thing, sizeof(uint8_t), bytes, image);
+  if (bytes_read <= bytes) {
+    if (ferror(image)) {
+      perror("fread");
+      exit(EXIT_FAILURE);
+    }
+  }
+  
+  if (tot != NULL){
+    *tot+=bytes_read;
+  }
+}
+
 void handle_superblock(FILE *image, fs_info *fs) {
-  uint8_t buf[sizeof(superblock)];
   size_t bytes_read;
   
   if (fseek(image, (fs_start + SUPERBLOCK_OFFSET), SEEK_SET) != 0) {
@@ -42,7 +61,7 @@ void handle_superblock(FILE *image, fs_info *fs) {
   }
   
   bytes_read = fread(&fs->sb, sizeof(uint8_t), sizeof(superblock), image);
-  if (bytes_read <= sizeof(buf)) {
+  if (bytes_read <= sizeof(superblock)) {
     if (ferror(image)) {
       perror("fread");
       exit(EXIT_FAILURE);
