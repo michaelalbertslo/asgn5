@@ -35,7 +35,7 @@ void print_superblock(fs_info *fs) {
 
 
 /*TODO: actually go trough a path. just doing root rn.*/
-void resolve_path(FILE *image, fs_info *fs, minix_inode *inode){
+void resolve_path(FILE *image, fs_info *fs, minix_inode *inode, char *path){
   char *cur_path;
   char *delim = strdup("/");
 

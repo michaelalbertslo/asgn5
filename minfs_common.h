@@ -13,6 +13,6 @@ void init_fs(FILE *image, fs_info *fs, int primary, int subpart);
 void print_superblock(fs_info *fs);
 off_t get_inode_offset(int node_num, fs_info *fs);
 void readinto(void *thing, off_t offset, size_t bytes, FILE *image, size_t *tot);
-void resolve_path(FILE *image, fs_info *fs, minix_inode *inode);
+void resolve_path(FILE *image, fs_info *fs, minix_inode *inode, char *path);
 
 #endif

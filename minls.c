@@ -205,7 +205,7 @@ int main(int argc, char *argv[]) {
     print_superblock(&fs);
   }
   printf("%s:\n", path);
-  resolve_path(image, &fs, &inode);
+  resolve_path(image, &fs, &inode, path);
   list_dir(image, &inode, &fs);
   return 0;
 }
