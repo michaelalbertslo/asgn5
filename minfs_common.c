@@ -34,15 +34,23 @@ void print_superblock(fs_info *fs) {
 
 
 
+
 /*TODO: actually go trough a path. just doing root rn.*/
 void resolve_path(FILE *image, fs_info *fs, minix_inode *inode, char *path){
   char *cur_path;
+  char *save;
   char *delim = strdup("/");
 
-  readinto(inode, get_inode_offset(1,fs), sizeof(minix_inode), image, NULL);
-  cur_path = strtok(path, delim);
+  /* root */
+  readinto(inode, get_inode_offset(1,fs), sizeof(minix_inode), image, NULL); 
+  cur_path = strtok_r(path, delim, &save);
   while (cur_path != NULL){
-    /* traverse */
+    cur_path = strtok_r(NULL, delim, &save);
+
+    /* search for i node in root. need to look through all data blocks direct zones, indirect zones, double indirect*/
+    /* check if its a regular file or directory */
+    /* if reg file and still more in path, fail*/
+    /* if reg file and end of path, just list file*/
   }
 }
 
