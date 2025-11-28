@@ -207,7 +207,7 @@ void read_double_indirect_zone(FILE *image, uint32_t double_indirect_zone, fs_in
   }
 }
 
-/*TODO: go through indirect zones as well*/
+/* TODO: count zone 0 as bytes read even if you do nothing*/
 void list_dir(FILE *image, minix_inode *dir_node, fs_info *fs) {
   int i;
   
