@@ -40,6 +40,14 @@ const char *imagefile = NULL;
 const char *srcpath = NULL;
 const char *dstpath = NULL;
 
+typedef struct {
+  FILE *image;
+  FILE *out;
+  fs_info *fs;
+  /*pointer to buffer address*/
+  uint8_t *buf;
+  size_t buf_size;
+} copy_context;
 
 /*function to use getopts to parse cmd line args*/
 void parse_options(int argc, char *argv[]) {
@@ -108,56 +116,103 @@ void parse_options(int argc, char *argv[]) {
 /*testing function - will delete */
 /* ---------- zone iterator test helpers (for debugging) ---------- */
 
-typedef struct {
-  uint64_t total_bytes;       /* total length of all spans */
-  uint64_t next_file_off;     /* where the next span *should* start */
-  int      first_span;        /* flag so we don't check contiguity on first one */
-} zone_test_ctx;
+// typedef struct {
+//   uint64_t total_bytes;       /* total length of all spans */
+//   uint64_t next_file_off;     /* where the next span *should* start */
+//   int      first_span;        /* flag so we don't check contiguity on first one */
+// } zone_test_ctx;
 
-static int test_zone_cb(const zone_span *span, void *user) {
-  zone_test_ctx *ctx = (zone_test_ctx *)user;
+// static int test_zone_cb(const zone_span *span, void *user) {
+//   zone_test_ctx *ctx = (zone_test_ctx *)user;
 
-  /* 1. Check contiguity: each span should start where the previous ended */
-  if (!ctx->first_span) {
-    if (span->file_off != ctx->next_file_off) {
-      fprintf(stderr,
-              "iterate_file_zones BUG: non-contiguous span: "
-              "got file_off=%llu, expected=%llu\n",
-              (unsigned long long)span->file_off,
-              (unsigned long long)ctx->next_file_off);
-      return -1;  /* abort iteration */
+//   /* 1. Check contiguity: each span should start where the previous ended */
+//   if (!ctx->first_span) {
+//     if (span->file_off != ctx->next_file_off) {
+//       fprintf(stderr,
+//               "iterate_file_zones BUG: non-contiguous span: "
+//               "got file_off=%llu, expected=%llu\n",
+//               (unsigned long long)span->file_off,
+//               (unsigned long long)ctx->next_file_off);
+//       return -1;  /* abort iteration */
+//     }
+//   }
+
+//   /* 2. Length must be > 0 */
+//   if (span->length == 0) {
+//     fprintf(stderr, "iterate_file_zones BUG: zero-length span\n");
+//     return -1;
+//   }
+
+//   /* 3. Holes vs data sanity */
+//   if (span->is_hole && span->zone != 0) {
+//     fprintf(stderr, "iterate_file_zones BUG: hole with nonzero zone=%u\n", span->zone);
+//     return -1;
+//   }
+//   if (!span->is_hole && span->zone == 0) {
+//     fprintf(stderr, "iterate_file_zones BUG: data span with zone==0\n");
+//     return -1;
+//   }
+
+//   /* 4. Optional debug print (guard with verbose_flag if you want) */
+//   printf("span: file_off=%10llu len=%6u zone=%6u %s\n",
+//          (unsigned long long)span->file_off,
+//          span->length,
+//          span->zone,
+//          span->is_hole ? "(hole)" : "(data)");
+
+//   /* 5. Update running totals */
+//   ctx->total_bytes   += span->length;
+//   ctx->next_file_off  = span->file_off + span->length;
+//   ctx->first_span     = 0;
+
+//   return 0;  /* keep iterating */
+// }
+
+/*copies data from file zone to output*/
+static int copy_callback(const zone_span *span, void *user) {
+  copy_context *ctx = (copy_context *)user;
+  uint32_t left = span->length;
+
+  if (span -> is_hole) {
+    /*treat the entire span as all zeroes*/
+    memset(ctx->buf, 0, ctx->buf_size);
+    /*fill buffer with zeroes*/
+    /*then write the zeros in chunks until span->length bytes written*/
+    while (left > 0) {
+      size_t chunk;
+      if (left < ctx->buf_size) {
+        chunk = left;
+      } else {
+        chunk = ctx->buf_size;
+      }
+      /*then write to the buffer and error check*/
+      if (fwrite(ctx->buf, 1, chunk, ctx->out) != chunk) {
+        perror("fwrite");
+        return -1;
+      }
+      left -= (uint32_t)chunk;
     }
+    return 0;
   }
-
-  /* 2. Length must be > 0 */
-  if (span->length == 0) {
-    fprintf(stderr, "iterate_file_zones BUG: zero-length span\n");
-    return -1;
+  /*not a hole, read from file and write to buffer as normal*/
+  off_t pos = span->image_off;
+  while (left > 0) {
+    /*use readinto to get file contents and write to out*/
+    size_t chunk;
+    if (left < ctx->buf_size) {
+      chunk = left;
+    } else {
+      chunk = ctx->buf_size;
+    }
+    readinto(ctx->buf, pos, chunk, ctx->image, NULL); 
+    if (fwrite(ctx->buf, 1, chunk, ctx->out) != chunk) {
+      perror("fwrite");
+      return -1;
+    }
+    pos += (off_t)chunk;
+    left -= (uint32_t)chunk;
   }
-
-  /* 3. Holes vs data sanity */
-  if (span->is_hole && span->zone != 0) {
-    fprintf(stderr, "iterate_file_zones BUG: hole with nonzero zone=%u\n", span->zone);
-    return -1;
-  }
-  if (!span->is_hole && span->zone == 0) {
-    fprintf(stderr, "iterate_file_zones BUG: data span with zone==0\n");
-    return -1;
-  }
-
-  /* 4. Optional debug print (guard with verbose_flag if you want) */
-  printf("span: file_off=%10llu len=%6u zone=%6u %s\n",
-         (unsigned long long)span->file_off,
-         span->length,
-         span->zone,
-         span->is_hole ? "(hole)" : "(data)");
-
-  /* 5. Update running totals */
-  ctx->total_bytes   += span->length;
-  ctx->next_file_off  = span->file_off + span->length;
-  ctx->first_span     = 0;
-
-  return 0;  /* keep iterating */
+  return 0; /*success*/
 }
 
 
@@ -165,6 +220,11 @@ int main(int argc, char *argv[]){
   FILE *image = NULL;
   fs_info fs;
   minix_inode inode;
+  FILE *out = NULL;
+  uint8_t *buf = NULL;
+  size_t buf_size;
+  int result;
+
 
   parse_options(argc, argv);
 
@@ -182,29 +242,54 @@ int main(int argc, char *argv[]){
     print_superblock(&fs);
   }
   /*then do the minget specific stuff*/
+  if (srcpath == NULL) {
+    exit(EXIT_FAILURE);
+  }
   resolve_path(image, &fs, &inode, (char *)srcpath);
-  /* ---------- TEST iterate_file_zones ON THIS INODE ---------- */
-  zone_test_ctx ctx;
-  ctx.total_bytes   = 0;
-  ctx.next_file_off = 0;
-  ctx.first_span    = 1;
-
-  int rc = iterate_file_zones(image, &fs, &inode, test_zone_cb, &ctx);
-  if (rc != 0) {
-    fprintf(stderr, "iterate_file_zones failed with %d\n", rc);
+  if ((inode.mode & FILEMASK) != REGFILE) {
+    fprintf(stderr, "Not a regular file.\n");
     exit(EXIT_FAILURE);
   }
-
-  if (ctx.total_bytes != inode.size) {
-    fprintf(stderr,
-            "iterate_file_zones BUG: covered %llu bytes, inode.size=%u\n",
-            (unsigned long long)ctx.total_bytes,
-            inode.size);
+  /*checking for open destination, file or stdout*/
+  if (dstpath == NULL) {
+    out = stdout;
+  } else {
+    out = fopen(dstpath, "wb");
+    if (out == NULL) {
+      perror("fopen dstpath");
+      exit(EXIT_FAILURE);
+    }
+  }
+  /*set up read/write buffer and context struct now*/
+  buf_size = fs.sb.blocksize;
+  /*buff is one block size from superblock*/
+  buf = malloc(buf_size);
+  if (buf == NULL) {
+    perror("malloc");
     exit(EXIT_FAILURE);
   }
+  copy_context ctx;
+  ctx.image = image;
+  ctx.out = out;
+  ctx.fs = &fs;
+  ctx.buf = buf;
+  ctx.buf_size = buf_size;
 
-  printf("iterate_file_zones OK: covered %llu bytes (inode.size=%u)\n",
-          (unsigned long long)ctx.total_bytes,
-          inode.size);
+   if (verbose_flag) {
+    fprintf(stderr, "Copying %u bytes from \"%s\"...\n", inode.size, srcpath);
+  }
+  result = iterate_file_zones(image, &fs, &inode, copy_callback, &ctx);
+  free(buf);
+  if (out != stdout) {
+    if (fclose(out) != 0) {
+      perror("fclose dst");
+      exit(EXIT_FAILURE);
+    }
+  }
+  if (result != 0) {
+    fprintf(stderr, "Error copying file contents. \n");
+    exit(EXIT_FAILURE);
+  }
+  
   return 0;
 }
