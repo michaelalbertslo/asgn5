@@ -188,7 +188,6 @@ void resolve_path(FILE *image, fs_info *fs, minix_inode *inode, char *path){
   cur_path = strtok_r(path, delim, &save);
   while (cur_path != NULL){
     cur_path = strtok_r(NULL, delim, &save);
-
     /* search for i node in root. need to look through all data blocks direct zones, indirect zones, double indirect*/
     /* check if its a regular file or directory */
     /* if reg file and still more in path, fail*/
