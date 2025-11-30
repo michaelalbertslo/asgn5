@@ -2,6 +2,7 @@
 #define MIN_H
 
 #include <stdint.h>
+#include <unistd.h>
 
 #define PARTITION_TABLE_OFFSET   0x1BE
 #define PARTITION_TYPE_MINIX     0x81
@@ -20,7 +21,7 @@
 #define BOOT_SIGNATURE_2_LOC     511
 #define BOOT_SIG_1               0x55
 #define BOOT_SIG_2               0xAA
-#define SUPERBLOCK_OFFSET        1024
+#define SUPERBLOCK_OFFSET  1024
 
 typedef struct __attribute__((packed)) partition_entry {
   uint8_t  bootind;
@@ -54,6 +55,14 @@ typedef struct __attribute__((packed)) superblock {
 
 
 #define DIRECT_ZONES 7
+
+typedef struct {
+  int        is_hole; 
+  uint32_t   zone;       
+  off_t      image_off;  
+  uint64_t   file_off;   
+  uint32_t   length;     
+} zone_span;
 
 typedef struct __attribute__((packed)) minix_inode {
   uint16_t mode;
