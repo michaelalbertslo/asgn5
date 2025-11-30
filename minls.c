@@ -145,6 +145,25 @@ void print_perms(mode_t mode){
   printf("%s ", perms);
 }
 
+char* normalize_path() {
+  static char normalized[sizeof(path)];
+  const char *start = path;
+  
+  while (*start == '/') {
+    start++;
+  }
+  
+  if (*start == '\0') {
+    normalized[0] = '/';
+    normalized[1] = '\0';
+  } else {
+    normalized[0] = '/';
+    strcpy(normalized + 1, start);
+  }
+  
+  return normalized;
+}
+
 void print_file(minix_dirent *entry, fs_info *fs, FILE *image){
   minix_inode file_node;
   char name[SAFE_NAME_SIZE];
@@ -239,7 +258,7 @@ int list_zone_callback(const zone_span *span, void *user){
 }
 
 void list_dir(FILE *image, minix_inode *dir_node, fs_info *fs) {
-  printf("/%s:\n", path);
+  printf("%s:\n", normalize_path());
   list_context ctx;
   ctx.image = image;
   ctx.fs = fs;
