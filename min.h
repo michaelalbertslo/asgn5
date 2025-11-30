@@ -21,7 +21,14 @@
 #define BOOT_SIGNATURE_2_LOC     511
 #define BOOT_SIG_1               0x55
 #define BOOT_SIG_2               0xAA
-#define SUPERBLOCK_OFFSET  1024
+#define SUPERBLOCK_OFFSET        1024
+
+#define FILEMASK                 0170000
+#define DIRECTORY                0040000
+#define REGFILE                  0100000
+
+
+#define SAFE_NAME_SIZE 61
 
 typedef struct __attribute__((packed)) partition_entry {
   uint8_t  bootind;
@@ -81,7 +88,7 @@ typedef struct __attribute__((packed)) minix_inode {
 
 typedef struct __attribute__((packed)) minix_dirent {
   uint32_t inode;
-  unsigned char name[60];
+  char name[60];
 } minix_dirent;
 
 typedef struct {
