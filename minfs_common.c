@@ -10,6 +10,14 @@
 off_t fs_start = 0;
 off_t fs_end;
 
+typedef struct {
+  FILE *image;
+  fs_info *fs;
+  const char *target_name;
+  uint32_t found_inode;
+  int found;
+} search_context;
+
 void print_superblock(fs_info *fs) {
   printf("Superblock:\n");
   printf("  On disk:\n");
@@ -177,22 +185,79 @@ zone_visit_fn cb, void *user) {
 }
 
 
+int search_zone_callback(const zone_span *span, void *user){
+  search_context *ctx = (search_context *)user;
+  uint32_t num_entries;
+  char name[SAFE_NAME_SIZE];
+  minix_dirent entry;
+  uint32_t i;
+  off_t offset;
+
+  if(span->is_hole){
+    return 0;
+  }
+
+  num_entries = span->length / sizeof(minix_dirent);
+
+  for(i = 0 ; i < num_entries ; i++){
+    offset = span->image_off + (i * sizeof(minix_dirent));
+    readinto(&entry, offset, sizeof(entry), ctx->image, NULL);
+
+    if (entry.inode == 0){
+      continue;
+    }
+
+    memcpy(name, entry.name, sizeof(entry.name));
+    name[sizeof(entry.name)] = '\0';
+
+    if (strcmp(name, ctx->target_name) == 0){
+      ctx->found_inode = entry.inode;
+      ctx->found = 1;
+      return 1;
+    }
+  }
+  
+  return 0;
+}
+
 /*TODO: actually go trough a path. just doing root rn.*/
 void resolve_path(FILE *image, fs_info *fs, minix_inode *inode, char *path){
-  char *cur_path;
-  char *save;
-  char *delim = strdup("/");
+  char *path_copy = strdup(path);
+  char *cur_name;
+  search_context ctx;
 
   /* root */
   readinto(inode, get_inode_offset(1,fs), sizeof(minix_inode), image, NULL); 
-  cur_path = strtok_r(path, delim, &save);
-  while (cur_path != NULL){
-    cur_path = strtok_r(NULL, delim, &save);
+  cur_name = strtok(path_copy, "/");
+  
+  while (cur_name != NULL){
+    if ((inode->mode & FILEMASK) != DIRECTORY){
+      fprintf(stderr, "%s: not a directory.\n", cur_name);
+      exit(EXIT_FAILURE);
+    }
+
+    ctx.found = 0;
+    ctx.image = image;
+    ctx.fs = fs;
+    ctx.target_name = cur_name;
+    ctx.found_inode = 0;
+    iterate_file_zones(image, fs, inode, search_zone_callback, &ctx);
+
+    if(!ctx.found){
+      fprintf(stderr, "%s: file not found.\n", cur_name);
+      exit(EXIT_FAILURE);
+    }
+
+    readinto(inode, get_inode_offset(ctx.found_inode, fs), sizeof(minix_inode), image, NULL);
+
+    cur_name = strtok(NULL, "/");
+
     /* search for i node in root. need to look through all data blocks direct zones, indirect zones, double indirect*/
     /* check if its a regular file or directory */
     /* if reg file and still more in path, fail*/
     /* if reg file and end of path, just list file*/
   }
+  free(path_copy);
 }
 
 void readinto(void *thing, off_t offset, size_t bytes, FILE *image, size_t *tot){
