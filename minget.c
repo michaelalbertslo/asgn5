@@ -5,18 +5,21 @@
 #include <sys/stat.h>
 #include <string.h>
 #include <stdlib.h>
+#include <sys/types.h>
 #include "minfs_common.h"
 #include "min.h"
 
 /*
-Minget copies a regular file from the given source path to the given destination path. 
+Minget copies a regular file from the given
+ source path to the given destination path. 
 If the destination path is ommitted, it copies to stdout.
 
 Will need to do:
 command line parsing
 read a file helper
 output to file or stdout
-Paths that do not include a leading ‘/’ are processed relative to the root directory
+Paths that do not include a leading ‘/’ 
+are processed relative to the root directory
 
 */
 
@@ -113,66 +116,13 @@ void parse_options(int argc, char *argv[]) {
 
 /*minget specific source code*/
 
-/*testing function - will delete */
-/* ---------- zone iterator test helpers (for debugging) ---------- */
-
-// typedef struct {
-//   uint64_t total_bytes;       /* total length of all spans */
-//   uint64_t next_file_off;     /* where the next span *should* start */
-//   int      first_span;        /* flag so we don't check contiguity on first one */
-// } zone_test_ctx;
-
-// static int test_zone_cb(const zone_span *span, void *user) {
-//   zone_test_ctx *ctx = (zone_test_ctx *)user;
-
-//   /* 1. Check contiguity: each span should start where the previous ended */
-//   if (!ctx->first_span) {
-//     if (span->file_off != ctx->next_file_off) {
-//       fprintf(stderr,
-//               "iterate_file_zones BUG: non-contiguous span: "
-//               "got file_off=%llu, expected=%llu\n",
-//               (unsigned long long)span->file_off,
-//               (unsigned long long)ctx->next_file_off);
-//       return -1;  /* abort iteration */
-//     }
-//   }
-
-//   /* 2. Length must be > 0 */
-//   if (span->length == 0) {
-//     fprintf(stderr, "iterate_file_zones BUG: zero-length span\n");
-//     return -1;
-//   }
-
-//   /* 3. Holes vs data sanity */
-//   if (span->is_hole && span->zone != 0) {
-//     fprintf(stderr, "iterate_file_zones BUG: hole with nonzero zone=%u\n", span->zone);
-//     return -1;
-//   }
-//   if (!span->is_hole && span->zone == 0) {
-//     fprintf(stderr, "iterate_file_zones BUG: data span with zone==0\n");
-//     return -1;
-//   }
-
-//   /* 4. Optional debug print (guard with verbose_flag if you want) */
-//   printf("span: file_off=%10llu len=%6u zone=%6u %s\n",
-//          (unsigned long long)span->file_off,
-//          span->length,
-//          span->zone,
-//          span->is_hole ? "(hole)" : "(data)");
-
-//   /* 5. Update running totals */
-//   ctx->total_bytes   += span->length;
-//   ctx->next_file_off  = span->file_off + span->length;
-//   ctx->first_span     = 0;
-
-//   return 0;  /* keep iterating */
-// }
 
 /*copies data from file zone to output*/
 static int copy_callback(const zone_span *span, void *user) {
   copy_context *ctx = (copy_context *)user;
   uint32_t left = span->length;
 
+  /*tests are failing for reading files with holes, need to correct*/
   if (span -> is_hole) {
     /*treat the entire span as all zeroes*/
     memset(ctx->buf, 0, ctx->buf_size);
@@ -180,6 +130,7 @@ static int copy_callback(const zone_span *span, void *user) {
     /*then write the zeros in chunks until span->length bytes written*/
     while (left > 0) {
       size_t chunk;
+      /*maybe instead of ctx->buf_size try zonesize?*/
       if (left < ctx->buf_size) {
         chunk = left;
       } else {
@@ -215,6 +166,18 @@ static int copy_callback(const zone_span *span, void *user) {
   return 0; /*success*/
 }
 
+// /*temp, will remove*/
+// static int debug_span_cb(const zone_span *span, void *user) {
+//   (void)user;
+//   printf("span: file_off=%10llu len=%6u zone=%6u %s\n",
+//          (unsigned long long)span->file_off,
+//          span->length,
+//          span->zone,
+//          span->is_hole ? "(hole)" : "(data)");
+//   return 0;
+// }
+
+
 
 int main(int argc, char *argv[]){
   FILE *image = NULL;
@@ -245,7 +208,7 @@ int main(int argc, char *argv[]){
   if (srcpath == NULL) {
     exit(EXIT_FAILURE);
   }
-  resolve_path(image, &fs, &inode, (char *)srcpath);
+  resolve_path(image, &fs, &inode, (char *)srcpath, NULL);
   if ((inode.mode & FILEMASK) != REGFILE) {
     fprintf(stderr, "Not a regular file.\n");
     exit(EXIT_FAILURE);
@@ -278,6 +241,9 @@ int main(int argc, char *argv[]){
    if (verbose_flag) {
     fprintf(stderr, "Copying %u bytes from \"%s\"...\n", inode.size, srcpath);
   }
+  // if (strcmp(srcpath, "/Holes/whole-indirect") == 0) {
+  //   iterate_file_zones(image, &fs, &inode, debug_span_cb, NULL);
+  // }
   result = iterate_file_zones(image, &fs, &inode, copy_callback, &ctx);
   free(buf);
   if (out != stdout) {

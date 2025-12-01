@@ -13,8 +13,9 @@
 #define MINPART 0
 
 #define PERMSMASK 07777
-
 #define CORRECTSIZE 64
+
+#define PATH_MAX 4096
 
 
 typedef struct {
@@ -45,7 +46,8 @@ void parse_options(int argc, char *argv[]) {
           exit(EXIT_FAILURE);
         }
         if (primary > MAXPART || primary < MINPART) {
-          fprintf(stderr, "Partition %d out of range.  Must be 0..3.\n", primary);
+          fprintf(stderr,
+            "Partition %d out of range.  Must be 0..3.\n", primary);
           exit(EXIT_FAILURE);
         }
         break;
@@ -56,12 +58,14 @@ void parse_options(int argc, char *argv[]) {
           exit(EXIT_FAILURE);
         }
         if (subpart > MAXPART || subpart < MINPART) {
-          fprintf(stderr, "Partition %d out of range.  Must be 0..3.\n", subpart);
+          fprintf(stderr,
+            "Partition %d out of range.  Must be 0..3.\n", subpart);
           exit(EXIT_FAILURE);
         }
         break;
       default:
-        fprintf(stderr, "usage: minls [ -v ] [ -p num [ -s num ] ] imagefile [ path ]\n");
+        fprintf(stderr,
+          "usage: minls [ -v ] [ -p num [ -s num ] ] imagefile [ path ]\n");
         exit(EXIT_FAILURE);
     }
   }
@@ -73,7 +77,8 @@ void parse_options(int argc, char *argv[]) {
   
   remain = argc - optind;
   if (remain <= 0) {
-    fprintf(stderr, "usage: minls [ -v ] [ -p num [ -s num ] ] imagefile [ path ]\n");
+    fprintf(stderr,
+      "usage: minls [ -v ] [ -p num [ -s num ] ] imagefile [ path ]\n");
     exit(EXIT_FAILURE);
   }
   
@@ -145,72 +150,38 @@ void print_perms(mode_t mode){
   printf("%s ", perms);
 }
 
+char* normalize_path() {
+  static char normalized[PATH_MAX];
+  const char *start = path;
+  
+  while (*start == '/') {
+    start++;
+  }
+  
+  if (*start == '\0') {
+    normalized[0] = '/';
+    normalized[1] = '\0';
+  } else {
+    normalized[0] = '/';
+    strcpy(normalized + 1, start);
+  }
+  
+  return normalized;
+}
+
 void print_file(minix_dirent *entry, fs_info *fs, FILE *image){
   minix_inode file_node;
   char name[SAFE_NAME_SIZE];
   memcpy(name, entry->name, SAFE_NAME_SIZE-1);
   name[SAFE_NAME_SIZE-1] = '\0';
 
-  readinto(&file_node, get_inode_offset(entry->inode ,fs), sizeof(minix_inode), image, NULL);
+  readinto(&file_node, get_inode_offset(entry->inode ,fs),
+    sizeof(minix_inode), image, NULL);
   print_filetype(file_node.mode);
   print_perms(file_node.mode & PERMSMASK);
   printf("%9u %s\n", file_node.size, name);
 }
 
-/*
-void read_zone_entries(FILE *image, uint32_t zone_num, fs_info *fs, size_t *total_bytes_read, uint32_t dir_size) {
-  size_t zone_bytes_read = 0;
-  size_t bytes_just_read = 0;
-  off_t offset;
-  minix_dirent dirent;
-  
-  while (zone_bytes_read < fs->zonesize && *total_bytes_read < dir_size) {
-    offset = (zone_num * fs->zonesize) + zone_bytes_read;
-    bytes_just_read = 0;
-    readinto(&dirent, offset, sizeof(dirent), image, &bytes_just_read);
-    
-    zone_bytes_read += bytes_just_read;
-    *total_bytes_read += bytes_just_read;
-    
-    if (dirent.inode == 0) {
-      continue;
-    }
-    
-    print_file(&dirent, fs, image);
-  }
-}
-*/
-
-/* indirect zone is a number (zone number) where in that zones first block, has zone numbers of actual data
-void read_indirect_zone(FILE *image, uint32_t indirect_zone, fs_info *fs, size_t *total_bytes_read, uint32_t dir_size) {
-  off_t offset = (indirect_zone * fs->zonesize);
-  int i;
-  uint32_t zones[fs->ptrs_per_blk];
-  readinto(zones, offset, sizeof(zones), image, NULL);
-
-  for (i = 0; i < fs->ptrs_per_blk; i++){
-    if (zones[i] == 0){
-      return;
-    }
-    read_zone_entries(image, zones[i], fs, total_bytes_read, dir_size);
-  }  
-}
-*/
-
-/*
-void read_double_indirect_zone(FILE *image, uint32_t double_indirect_zone, fs_info *fs, size_t *total_bytes_read, uint32_t dir_size){
-  off_t offset = (double_indirect_zone * fs->zonesize);
-  int i;
-  uint32_t zones[fs->ptrs_per_blk];
-  readinto(zones, offset, sizeof(zones), image, NULL);
-  for (i = 0; i < fs->ptrs_per_blk; i++){
-    if (zones[i] == 0){
-      return;
-    }
-    read_indirect_zone(image, zones[i], fs, total_bytes_read, dir_size);
-  }
-}
-*/
 
 int list_zone_callback(const zone_span *span, void *user){
   list_context *ctx = (list_context *)user;
@@ -238,11 +209,18 @@ int list_zone_callback(const zone_span *span, void *user){
   return 0;
 }
 
-void list_dir(FILE *image, minix_inode *dir_node, fs_info *fs) {
-  printf("/%s:\n", path);
+void list_dir(FILE *image, minix_inode *dir_node, fs_info *fs, 
+  char *filename) {
   list_context ctx;
   ctx.image = image;
   ctx.fs = fs;
+  if ((dir_node->mode & FILEMASK) != DIRECTORY){
+    print_filetype(dir_node->mode);
+    print_perms(dir_node->mode & PERMSMASK);
+    printf("%9u %s\n", dir_node->size, normalize_path()+1); /*leading slash*/
+    return;
+  }
+  printf("%s:\n", normalize_path());
   iterate_file_zones(image, fs, dir_node, list_zone_callback, &ctx);
 }
 
@@ -251,6 +229,7 @@ int main(int argc, char *argv[]) {
   FILE *image = NULL;
   fs_info fs;
   minix_inode inode;
+  char filename[SAFE_NAME_SIZE];
   
   parse_options(argc, argv);
   
@@ -269,7 +248,8 @@ int main(int argc, char *argv[]) {
   if (verbose) {
     print_superblock(&fs);
   }
-  resolve_path(image, &fs, &inode, path);
-  list_dir(image, &inode, &fs);
+  resolve_path(image, &fs, &inode, path, filename);
+  filename[SAFE_NAME_SIZE-1] = '\0';
+  list_dir(image, &inode, &fs, filename);
   return 0;
 }

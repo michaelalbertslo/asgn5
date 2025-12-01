@@ -14,7 +14,6 @@
 
 #define MINIX_INODE_SIZE         64
 #define MINIX_DIRENT_SIZE        64
-#define MAX_NAME_SIZE            60
 
 #define MBR_SIZE                 512
 #define SECTOR_SIZE              512
