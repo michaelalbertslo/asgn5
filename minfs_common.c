@@ -343,6 +343,7 @@ void handle_part(FILE *image) {
     }
   }
 
+
   if (buf[BOOT_SIGNATURE_1_LOC] != BOOT_SIG_1 ||
       buf[BOOT_SIGNATURE_2_LOC] != BOOT_SIG_2) {
     fprintf(stderr, "Invalid partition signature (0x%x, 0x%x).\n",
@@ -356,6 +357,8 @@ void handle_part(FILE *image) {
     perror("memcpy");
     exit(EXIT_FAILURE);
   }
+
+  /*printf("type: %x\n", entry.type);*/
 
   if (entry.type != PARTITION_TYPE_MINIX) {
     fprintf(stderr, "This doesn't look like a Minix filesystem.\n");

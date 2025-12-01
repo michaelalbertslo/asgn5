@@ -214,6 +214,9 @@ void list_dir(FILE *image, minix_inode *dir_node, fs_info *fs) {
   list_context ctx;
   ctx.image = image;
   ctx.fs = fs;
+  if ((dir_node->mode & FILEMASK) != DIRECTORY){
+    printf("not a dir\n");
+  }
   iterate_file_zones(image, fs, dir_node, list_zone_callback, &ctx);
 }
 
