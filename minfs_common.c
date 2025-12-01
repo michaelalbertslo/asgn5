@@ -227,7 +227,7 @@ int search_zone_callback(const zone_span *span, void *user){
 
 /*TODO: actually go trough a path. just doing root rn.*/
 void resolve_path(FILE *image, fs_info *fs, minix_inode *inode,
-    char *path){
+    char *path, char *filename){
   char *path_copy = strdup(path);
   char *cur_name;
   search_context ctx;
@@ -258,6 +258,9 @@ void resolve_path(FILE *image, fs_info *fs, minix_inode *inode,
     readinto(inode, get_inode_offset(ctx.found_inode, fs),
         sizeof(minix_inode), image, NULL);
 
+    if (filename){
+      memcpy(filename, cur_name, strlen(cur_name));
+    }
     cur_name = strtok(NULL, "/");
 
     /* search for i node in root. need to look through all data blocks
@@ -351,14 +354,16 @@ void handle_part(FILE *image, int partition) {
     exit(EXIT_FAILURE);
   }
 
-  if (memcpy(&entry, &buf[PARTITION_TABLE_OFFSET + (sizeof(entry) * partition)],
+  if (memcpy(&entry, &buf[PARTITION_TABLE_OFFSET + 
+            (sizeof(entry) * partition)],
              sizeof(entry)) == NULL) {
     perror("memcpy");
     exit(EXIT_FAILURE);
   }
 
   if (entry.type != PARTITION_TYPE_MINIX) {
-    fprintf(stderr, "This doesn't look like a Minix filesystem.\n");
+    fprintf(stderr, 
+      "This doesn't look like a minix partition. (wrong type)\n");
     exit(EXIT_FAILURE);
   }
 

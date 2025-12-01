@@ -209,14 +209,18 @@ int list_zone_callback(const zone_span *span, void *user){
   return 0;
 }
 
-void list_dir(FILE *image, minix_inode *dir_node, fs_info *fs) {
-  printf("%s:\n", normalize_path());
+void list_dir(FILE *image, minix_inode *dir_node, fs_info *fs, 
+  char *filename) {
   list_context ctx;
   ctx.image = image;
   ctx.fs = fs;
   if ((dir_node->mode & FILEMASK) != DIRECTORY){
-    printf("not a dir\n");
+    print_filetype(dir_node->mode);
+    print_perms(dir_node->mode & PERMSMASK);
+    printf("%9u %s\n", dir_node->size, normalize_path()+1); /*leading slash*/
+    return;
   }
+  printf("%s:\n", normalize_path());
   iterate_file_zones(image, fs, dir_node, list_zone_callback, &ctx);
 }
 
@@ -225,6 +229,7 @@ int main(int argc, char *argv[]) {
   FILE *image = NULL;
   fs_info fs;
   minix_inode inode;
+  char filename[SAFE_NAME_SIZE];
   
   parse_options(argc, argv);
   
@@ -243,7 +248,8 @@ int main(int argc, char *argv[]) {
   if (verbose) {
     print_superblock(&fs);
   }
-  resolve_path(image, &fs, &inode, path);
-  list_dir(image, &inode, &fs);
+  resolve_path(image, &fs, &inode, path, filename);
+  filename[SAFE_NAME_SIZE-1] = '\0';
+  list_dir(image, &inode, &fs, filename);
   return 0;
 }
