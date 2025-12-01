@@ -209,7 +209,8 @@ int list_zone_callback(const zone_span *span, void *user){
   return 0;
 }
 
-void list_dir(FILE *image, minix_inode *dir_node, fs_info *fs, char *filename) {
+void list_dir(FILE *image, minix_inode *dir_node, fs_info *fs, 
+  char *filename) {
   list_context ctx;
   ctx.image = image;
   ctx.fs = fs;

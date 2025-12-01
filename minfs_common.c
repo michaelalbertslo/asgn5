@@ -354,14 +354,16 @@ void handle_part(FILE *image, int partition) {
     exit(EXIT_FAILURE);
   }
 
-  if (memcpy(&entry, &buf[PARTITION_TABLE_OFFSET + (sizeof(entry) * partition)],
+  if (memcpy(&entry, &buf[PARTITION_TABLE_OFFSET + 
+            (sizeof(entry) * partition)],
              sizeof(entry)) == NULL) {
     perror("memcpy");
     exit(EXIT_FAILURE);
   }
 
   if (entry.type != PARTITION_TYPE_MINIX) {
-    fprintf(stderr, "This doesn't look like a Minix filesystem.\n");
+    fprintf(stderr, 
+      "This doesn't look like a minix partition. (wrong type)\n");
     exit(EXIT_FAILURE);
   }
 
