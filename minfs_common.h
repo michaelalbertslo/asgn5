@@ -9,7 +9,7 @@ extern off_t fs_end;
 
 typedef int (*zone_visit_fn)(const zone_span *span, void *user);
 
-void handle_part(FILE *image);
+void handle_part(FILE *image, int partition);
 void handle_superblock(FILE *image, fs_info *fs);
 void init_fs(FILE *image, fs_info *fs, int primary, int subpart);
 void print_superblock(fs_info *fs);

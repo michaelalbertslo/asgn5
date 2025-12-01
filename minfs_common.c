@@ -325,7 +325,7 @@ void handle_superblock(FILE *image, fs_info *fs) {
 
 /* will change this to add implementation for main part and subpart
    options*/
-void handle_part(FILE *image) {
+void handle_part(FILE *image, int partition) {
   uint8_t buf[MBR_SIZE];
   size_t bytes_read;
   partition_entry entry;
@@ -343,6 +343,7 @@ void handle_part(FILE *image) {
     }
   }
 
+
   if (buf[BOOT_SIGNATURE_1_LOC] != BOOT_SIG_1 ||
       buf[BOOT_SIGNATURE_2_LOC] != BOOT_SIG_2) {
     fprintf(stderr, "Invalid partition signature (0x%x, 0x%x).\n",
@@ -350,8 +351,7 @@ void handle_part(FILE *image) {
     exit(EXIT_FAILURE);
   }
 
-  if (memcpy(&entry, &buf[PARTITION_TABLE_OFFSET +
-             (sizeof(entry) * (fs_start / SECTOR_SIZE ? 0 : 0))],
+  if (memcpy(&entry, &buf[PARTITION_TABLE_OFFSET + (sizeof(entry) * partition)],
              sizeof(entry)) == NULL) {
     perror("memcpy");
     exit(EXIT_FAILURE);
@@ -373,9 +373,9 @@ void handle_part(FILE *image) {
 
 static void init_haspart(FILE *image, fs_info *fs, int primary,
     int subpart) {
-  handle_part(image);
+  handle_part(image, primary);
   if (subpart != -1) {
-    handle_part(image);
+    handle_part(image, subpart);
   }
   handle_superblock(image, fs);
 }
