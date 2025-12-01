@@ -29,6 +29,7 @@ static int subpart = -1;
 const char *imagefile = NULL;
 char *path = NULL;
 
+/* parse command line arguments */
 void parse_options(int argc, char *argv[]) {
   int opt;
   char *end;
@@ -65,16 +66,19 @@ void parse_options(int argc, char *argv[]) {
         break;
       default:
         fprintf(stderr,
-          "usage: minls [ -v ] [ -p num [ -s num ] ] imagefile [ path ]\n");
+          "usage: minls [ -v ] [ -p num [ -s num ] ] imagefile"
+          " [ path ]\n");
         exit(EXIT_FAILURE);
     }
   }
   
+  /* subpartition requires a primary partition */
   if (subpart != -1 && primary == -1) {
     fprintf(stderr, "usage: -s requires -p\n");
     exit(EXIT_FAILURE);
   }
   
+  /* verify we have at least the imagefile argument */
   remain = argc - optind;
   if (remain <= 0) {
     fprintf(stderr,
@@ -82,11 +86,20 @@ void parse_options(int argc, char *argv[]) {
     exit(EXIT_FAILURE);
   }
   
+  /* extract imagefile and optional path arguments */
   imagefile = argv[optind++];
   if (remain >= 2) {
     path = strdup(argv[optind]);
+    if (path == NULL) {
+      perror("strdup");
+      exit(EXIT_FAILURE);
+    }
   } else {
     path = strdup("/");
+    if (path == NULL) {
+      perror("strdup");
+      exit(EXIT_FAILURE);
+    }
   }
   
   if (verbose) {
@@ -98,14 +111,21 @@ void parse_options(int argc, char *argv[]) {
   }
 }
 
+/* print file type indicator */
 void print_filetype(uint16_t mode){
   uint16_t type = mode & FILEMASK;
   switch(type){
     case DIRECTORY:
-      printf("d");
+      if (printf("d") < 0) {
+        perror("printf");
+        exit(EXIT_FAILURE);
+      }
       break;
     case REGFILE:
-      printf("-");
+      if (printf("-") < 0) {
+        perror("printf");
+        exit(EXIT_FAILURE);
+      }
       break;
     default:
       fprintf(stderr, "err: not a directory or regfile\n");
@@ -147,42 +167,59 @@ void print_perms(mode_t mode){
   }
 
   perms[9] = '\0';
-  printf("%s ", perms);
+  if (printf("%s ", perms) < 0) {
+    perror("printf");
+    exit(EXIT_FAILURE);
+  }
 }
 
+/* normalize path by ensuring it starts with exactly one slash */
 char* normalize_path() {
   static char normalized[PATH_MAX];
   const char *start = path;
   
+  /* skip any leading slashes */
   while (*start == '/') {
     start++;
   }
   
+  /* handle root directory case */
   if (*start == '\0') {
     normalized[0] = '/';
     normalized[1] = '\0';
   } else {
+    /* prepend single slash to non-root paths */
     normalized[0] = '/';
-    strcpy(normalized + 1, start);
+    if (strcpy(normalized + 1, start) == NULL) {
+      fprintf(stderr, "strcpy failed\n");
+      exit(EXIT_FAILURE);
+    }
   }
   
   return normalized;
 }
 
+/* print file information */
 void print_file(minix_dirent *entry, fs_info *fs, FILE *image){
   minix_inode file_node;
   char name[SAFE_NAME_SIZE];
+  
   memcpy(name, entry->name, SAFE_NAME_SIZE-1);
   name[SAFE_NAME_SIZE-1] = '\0';
 
+  /* read inode data for this directory entry */
   readinto(&file_node, get_inode_offset(entry->inode ,fs),
     sizeof(minix_inode), image, NULL);
   print_filetype(file_node.mode);
   print_perms(file_node.mode & PERMSMASK);
-  printf("%9u %s\n", file_node.size, name);
+  if (printf("%9u %s\n", file_node.size, name) < 0) {
+    perror("printf");
+    exit(EXIT_FAILURE);
+  }
 }
 
 
+/* callback function invoked for each data zone in a directory */
 int list_zone_callback(const zone_span *span, void *user){
   list_context *ctx = (list_context *)user;
   uint32_t num_entries;
@@ -194,6 +231,7 @@ int list_zone_callback(const zone_span *span, void *user){
     return 0;
   }
 
+  /* calculate how many directory entries fit in this zone */
   num_entries = span->length / sizeof(minix_dirent);
 
   for(i=0 ; i< num_entries; i++){
@@ -209,17 +247,29 @@ int list_zone_callback(const zone_span *span, void *user){
   return 0;
 }
 
+/* list contents of directory or display file information */
 void list_dir(FILE *image, minix_inode *dir_node, fs_info *fs) {
   list_context ctx;
   ctx.image = image;
   ctx.fs = fs;
+  
+  /* if target is a regular file, print its info and return */
   if ((dir_node->mode & FILEMASK) != DIRECTORY){
     print_filetype(dir_node->mode);
     print_perms(dir_node->mode & PERMSMASK);
-    printf("%9u %s\n", dir_node->size, normalize_path()+1); /*leading slash*/
+    /* Skip leading slash when printing filename */
+    if (printf("%9u %s\n", dir_node->size, normalize_path()+1) < 0) {
+      perror("printf");
+      exit(EXIT_FAILURE);
+    }
     return;
   }
-  printf("%s:\n", normalize_path());
+  
+  /* print directory header and iterate through entries */
+  if (printf("%s:\n", normalize_path()) < 0) {
+    perror("printf");
+    exit(EXIT_FAILURE);
+  }
   iterate_file_zones(image, fs, dir_node, list_zone_callback, &ctx);
 }
 
@@ -232,21 +282,36 @@ int main(int argc, char *argv[]){
   parse_options(argc, argv);
   
   if (verbose) {
-    printf("verbose: Opening imagefile...\n");
+    if (printf("verbose: Opening imagefile...\n") < 0) {
+      perror("printf");
+      exit(EXIT_FAILURE);
+    }
   }
   
+  /* open the filesystem image file for reading */
   image = fopen(imagefile, "r");
   if (image == NULL) {
     perror("fopen");
     exit(EXIT_FAILURE);
   }
   
+  /* init filesystem metadata from superblock and partition table */
   init_fs(image, &fs, primary, subpart);
   
   if (verbose) {
     print_superblock(&fs);
   }
+  
   resolve_path(image, &fs, &inode, path);
+  
   list_dir(image, &inode, &fs);
+  
+  free(path);
+
+  if (fclose(image) != 0) {
+    perror("fclose");
+    exit(EXIT_FAILURE);
+  }
+  
   return 0;
 }
