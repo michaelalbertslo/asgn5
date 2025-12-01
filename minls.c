@@ -209,8 +209,7 @@ int list_zone_callback(const zone_span *span, void *user){
   return 0;
 }
 
-void list_dir(FILE *image, minix_inode *dir_node, fs_info *fs, 
-  char *filename) {
+void list_dir(FILE *image, minix_inode *dir_node, fs_info *fs) {
   list_context ctx;
   ctx.image = image;
   ctx.fs = fs;
@@ -225,11 +224,10 @@ void list_dir(FILE *image, minix_inode *dir_node, fs_info *fs,
 }
 
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[]){
   FILE *image = NULL;
   fs_info fs;
   minix_inode inode;
-  char filename[SAFE_NAME_SIZE];
   
   parse_options(argc, argv);
   
@@ -248,8 +246,7 @@ int main(int argc, char *argv[]) {
   if (verbose) {
     print_superblock(&fs);
   }
-  resolve_path(image, &fs, &inode, path, filename);
-  filename[SAFE_NAME_SIZE-1] = '\0';
-  list_dir(image, &inode, &fs, filename);
+  resolve_path(image, &fs, &inode, path);
+  list_dir(image, &inode, &fs);
   return 0;
 }
